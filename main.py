@@ -85,6 +85,11 @@ class Window(tk.Tk):
         self.SVl.set(self.position)
         self.l.update()
 
+        try:
+            word[self.position]
+        except IndexError:
+            self.position -= 1
+
 
         if typedword == word + " " or typedword == (word + ","):
             self.position = 0
@@ -92,7 +97,7 @@ class Window(tk.Tk):
             self.nextword()
             return True
 
-        if typedword == self.string[-1]:
+        elif typedword == self.string[-1]:
             self.stoptimer()
             #self.wordentry.configure(validate = "none")
             return True

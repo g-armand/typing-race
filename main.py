@@ -4,7 +4,8 @@ import time
 import threading                            #allows the program to run two or more tasks simultaneously (eg. timer)
 import sqlite3                              #will store scores in sql3 database
 import os.path                              #will check if the database exists or not
-import matplotlib.pyplot as plt             #will draw graphs, to show stats on typing pace enhancements
+import matplotlib.pyplot as plt             #will draw graphs, to show stats about typing pace enhancements
+import wikipedia
 
 #check if the sql database exists, creates it if not and sets up the variables "FICHIER" "CONN" and "CUR"
 if os.path.isfile("testbd.sq3"):
@@ -17,6 +18,32 @@ else:
     CUR = CONN.cursor()
     CUR.execute("CREATE TABLE scores (try INTEGER, wordperminute REAL)")
 
+def random_wikipedia_title():
+    """ runs in 2.7 seconds"""
+    summary = None
+    #wikipedia.set_lang("fr")
+
+    title = wikipedia.random(pages = 1)
+    try:
+        summary = wikipedia.summary(title, sentences = 1)
+
+    except wikipedia.exceptions.DisambiguationError:
+        return None
+#
+    except wikipedia.exceptions.PageError:
+        return None
+
+    if summary is None:
+        return None
+
+    elif len(summary) > 90 and len(summary) < 190:
+
+        is_summary_ascii = summary.isascii()
+        if is_summary_ascii:
+            return summary
+
+        else:
+            return None
 
 class Window(tk.Tk):
     def __init__(self):
@@ -30,10 +57,14 @@ class Window(tk.Tk):
         #variables
         self.start = True
         self.position = 0
-        self.txt = "Le Conseil a exprimé le souhait."
-        self.string = self.txt.split(' ')
+        self.txt = None
+
         self.count = 0
         self.words_per_minute = 0.0
+
+
+        #loading the stats
+        self.load_stats()
 
         #go to start menu
         self.startmenu()
@@ -59,6 +90,7 @@ class Window(tk.Tk):
         self.mainframe = tk.Frame(self.mainborder, height = 400, width = 800, bg = '#f2f2f2', bd = 3, highlightcolor = "#adcbef")
         self.mainframe.pack(expand = 'True', fill = "both")
 
+
     def startmenu(self):
         """
         main menu, displays the title and a button to start the game
@@ -69,10 +101,29 @@ class Window(tk.Tk):
         tk.Label(self.mainframe, width = 80, height = 10 , bg = '#f2f2f2', text = "TYPING RACE!!!", font = (20), fg = "#a97acc").grid(row = 0, columnspan = 2)
 
         #button to start the game
-        tk.Button(self.mainframe, width = 15, height = 5, text = "game", bg = '#a97acc', command = self.gamemenu).grid(row = 1, column = 0)
+        tk.Button(self.mainframe, width = 15, height = 5, text = "game", bg = '#a97acc', command = self.loading_gamemenu).grid(row = 1, column = 0)
 
         #button to show the stats
-        tk.Button(self.mainframe, width = 15, height = 5, text = "stats", bg = '#a97acc', command = self.stats).grid(row = 1, column = 1)
+        tk.Button(self.mainframe, width = 15, height = 5, text = "stats", bg = '#a97acc', command = self.stats_menu).grid(row = 1, column = 1)
+
+    def loading_gamemenu(self):
+
+        self.newframe()
+
+        #Loading marker
+        self.loading_label = tk.Label(self.mainframe, text = "Loading...")
+        self.loading_label.pack(fill = 'both', expand = True)
+        self.loading_label.update()
+
+
+        #generate sentence
+        self.txt = random_wikipedia_title()
+        while self.txt is None:
+            self.txt = random_wikipedia_title()
+        self.string = self.txt.split(' ')
+
+        self.gamemenu()
+
 
     def gamemenu(self):
         """
@@ -80,10 +131,12 @@ class Window(tk.Tk):
         - a timer which starts once the window is opened and stops when the sentence is completed
         -
         """
+
+
         #timer
         self.timertext = tk.StringVar(self, "0:00")
         self.timerlabel = tk.Label(self, textvariable = self.timertext, font = 20, bg ="#3EA64C")
-        self.timerlabel.pack(pady = 50, padx = 50, anchor = "ne")
+        self.timerlabel.pack(anchor = "ne", pady = 20, padx = 20)
 
         self.newframe()
 
@@ -100,17 +153,20 @@ class Window(tk.Tk):
         self.assertcommand = (self.register(self.assertion), "%s", "%S")
         self.wordentry = tk.Entry(self.mainframe, width = 40, bg = '#f2f2f2',  fg = "#a97acc", validate = "key", validatecommand = self.assertcommand)
         self.wordentry.grid(row = 2, pady = 10)
+        self.wordentry.focus()
 
         #temporaire
         self.SVl = tk.StringVar(self, self.position)
         self.l = tk.Label(self.mainframe, textvariable = self.SVl)
         self.l.grid(row = 1, column = 2, pady = 20)
 
+
         #allows the timer to run alongside the program
         self.threadtimer = threading.Thread(self.timer()).start()
 
-    def startgame(self):
-        pass
+    def back_to_startmenu(self):
+        self.timerlabel.destroy()
+        self.startmenu()
 
     def assertion(self, typingword, letter):
         """
@@ -140,6 +196,12 @@ class Window(tk.Tk):
 
         #if the word is complete and correspond to the last word of the sentence
         elif typedword == self.string[-1]:
+            #set the variables back to zero, in case we want to start the game again
+            self.count = 0
+            self.position = 0
+            #main menu button
+            tk.Button(self.mainframe, text = "Main Menu", command = self.back_to_startmenu).grid(row = 3, pady = 10)
+            #call  self.stoptimer() to stop the game, and return True
             self.stoptimer()
             return True
 
@@ -193,6 +255,7 @@ class Window(tk.Tk):
 
         score = float(self.timertext.get())
         self.wordentry.delete(0, "end")
+        self.timerlabel.destroy()
 
         self.words_per_minute = (60/score) * len(self.string)
 
@@ -223,7 +286,9 @@ class Window(tk.Tk):
         CUR.execute(command)
         CONN.commit()
 
-    def stats(self):
+        self.load_stats()
+
+    def load_stats(self):
         x = []
         y = []
 
@@ -239,16 +304,25 @@ class Window(tk.Tk):
 
         #create the graph
         plt.plot(x, y)
-
         plt.xlabel("tries")
         plt.ylabel("word/minute")
 
-        plt.show()
+        #save the graph, and load it back
+        plt.savefig("stats.png")
+        self.stats_image = tk.PhotoImage(file = "stats.png")
 
 
+    def stats_menu(self):
+        #get to the graph's file
+        self.newframe()
+        tk.Label(self.mainframe, image = self.stats_image).grid(row = 1)
 
+        #main menu button
+        tk.Button(self.mainframe, text = "Main Menu", command = self.startmenu).grid(row = 2, pady = 10)
 
 
 window = Window()
 window.mainloop()
 
+CUR.close()
+CONN.close()
